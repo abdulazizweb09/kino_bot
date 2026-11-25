@@ -1,0 +1,326 @@
+Kino bot — avtomatik test natijalari (2026-11-25 07:52 UTC)
+Jami: 323, o'tdi: 323, yiqildi: 0
+
+PASS  1.1 Dispatcher qurildi va JSON fayllar avtomatik yaratildi
+PASS  1.2 Asosiy admin admins.json da
+PASS  2.1 /start matni (bot nomi, admin kontakti)
+PASS  2.2 Asosiy klaviatura 4 ta tugma, admin tugmasi yo‘q
+PASS  2.3 Yangi foydalanuvchi users.json ga yozildi
+PASS  2.4 Takroriy /start qayta ro‘yxatdan o‘tkazmaydi
+PASS  2.5 users.json maydonlari to‘liq
+PASS  2.6 joined_at ISO 8601 (UTC)
+PASS  2.7 Asosiy adminda 🛠 Admin panel tugmasi bor
+PASS  16.1 Asosiy admin paneli: barcha bo‘limlar + Broadcast
+PASS  16.2 Rol tanlash taklifi (1-tur va 2-tur)
+PASS  16.3 Adminlar admins.json ga yozildi
+PASS  16.4 Yangi adminga xabar + admin klaviaturasi yuborildi
+PASS  16.5 Admin ro‘yxatida ID, ism, tur, vaqt, ruxsatlar
+PASS  16.6 Mavjud adminni qayta qo‘shib bo‘lmaydi
+PASS  16.7 Botdan foydalanmagan foydalanuvchi admin bo‘lolmaydi
+PASS  16.8 Noto‘g‘ri format tushunarli javob
+PASS  16.9 Kino admini faqat 🎬 bo‘limini ko‘radi
+PASS  16.10 Kino admini callback orqali chetlab o‘ta olmaydi: adm:st
+PASS  16.10 Kino admini callback orqali chetlab o‘ta olmaydi: adm:ch
+PASS  16.10 Kino admini callback orqali chetlab o‘ta olmaydi: adm:ad
+PASS  16.10 Kino admini callback orqali chetlab o‘ta olmaydi: adm:vip
+PASS  16.10 Kino admini callback orqali chetlab o‘ta olmaydi: adm:bk
+PASS  16.10 Kino admini callback orqali chetlab o‘ta olmaydi: adm:set
+PASS  16.10 Kino admini callback orqali chetlab o‘ta olmaydi: adm:bc
+PASS  16.10 Kino admini callback orqali chetlab o‘ta olmaydi: adm:st_u
+PASS  16.10 Kino admini callback orqali chetlab o‘ta olmaydi: adm:ch_tog
+PASS  16.10 Kino admini callback orqali chetlab o‘ta olmaydi: adm:bk_do
+PASS  16.10 Kino admini callback orqali chetlab o‘ta olmaydi: adm:bc_new
+PASS  16.10 Kino admini callback orqali chetlab o‘ta olmaydi: adm:vip_give
+PASS  16.10 Kino admini callback orqali chetlab o‘ta olmaydi: adm:set_e:card_number
+PASS  16.10 Kino admini callback orqali chetlab o‘ta olmaydi: adm:ad_add
+PASS  16.11 Kino admini to‘lovni tasdiqlay olmaydi
+PASS  16.12 To‘liq admin: kino/obuna/stat/admin/vip bor; backup/sozlama/broadcast yo‘q
+PASS  16.13 To‘liq admin ruxsatsiz callback: adm:bk
+PASS  16.13 To‘liq admin ruxsatsiz callback: adm:bk_do
+PASS  16.13 To‘liq admin ruxsatsiz callback: adm:bk_rs
+PASS  16.13 To‘liq admin ruxsatsiz callback: adm:set
+PASS  16.13 To‘liq admin ruxsatsiz callback: adm:set_e:card_number
+PASS  16.13 To‘liq admin ruxsatsiz callback: adm:bc
+PASS  16.13 To‘liq admin ruxsatsiz callback: adm:bc_new
+PASS  16.13 To‘liq admin ruxsatsiz callback: adm:bc_ok
+PASS  16.13 To‘liq admin ruxsatsiz callback: adm:bc_stop
+PASS  16.13 To‘liq admin ruxsatsiz callback: pay_ok:P00001
+PASS  16.13 To‘liq admin ruxsatsiz callback: pay_no:P00001
+PASS  16.13 To‘liq admin ruxsatsiz callback: adm:vip_pend
+PASS  16.14 To‘liq admin faqat 1-tur adminni qo‘sha oladi (2-tur taklif etilmaydi)
+PASS  16.15 Callbackni qo‘lda yuborib 2-tur admin qo‘shib bo‘lmaydi
+PASS  16.16 To‘liq admin asosiy adminni/rolni o‘zgartira olmaydi: adm:ad_xy:1000
+PASS  16.16 To‘liq admin asosiy adminni/rolni o‘zgartira olmaydi: adm:ad_x:1000
+PASS  16.16 To‘liq admin asosiy adminni/rolni o‘zgartira olmaydi: adm:ad_r:1000:movie
+PASS  16.16 To‘liq admin asosiy adminni/rolni o‘zgartira olmaydi: adm:ad_r:2001:full
+PASS  16.17 Oddiy foydalanuvchi admin callbackiga kira olmaydi: adm:mv
+PASS  16.17 Oddiy foydalanuvchi admin callbackiga kira olmaydi: adm:st
+PASS  16.17 Oddiy foydalanuvchi admin callbackiga kira olmaydi: adm:home
+PASS  16.17 Oddiy foydalanuvchi admin callbackiga kira olmaydi: adm:mv_add
+PASS  16.17 Oddiy foydalanuvchi admin callbackiga kira olmaydi: adm:bk_do
+PASS  16.18 Oddiy foydalanuvchi admin panelga kira olmaydi
+PASS  16.19 /admin buyrug‘i ham himoyalangan
+PASS  16.20 Asosiy admin rolni o‘zgartira oladi
+PASS  16.21 Asosiy admin rolni qaytara oladi
+PASS  16.22 Konfiguratsiyadan boshqa 'main' rolli yozuv pasaytiriladi
+PASS  3.1 Kino menyusi
+PASS  3.2 1/3 — video so‘raladi, Bekor qilish tugmasi bor
+PASS  3.3 Video o‘rniga matn: tushunarli xabar
+PASS  3.4 Video o‘rniga rasm: tushunarli xabar
+PASS  3.5 Video qabul qilindi → description so‘raladi
+PASS  3.6 Description o‘rniga rasm: xato xabari
+PASS  3.7 Juda uzun description rad etiladi
+PASS  3.8 Description qabul qilindi → nom so‘raladi
+PASS  3.9 Tasdiqlovchi xabar (kod va nom)
+PASS  3.10 movies.json to‘liq maydonlar
+PASS  3.11 Kino nomi captiondan emas, adminning o‘zi yuborgandan olindi
+PASS  3.12 file_id saqlandi, kod avtomatik
+PASS  3.13 Takroriy video qo‘shilmaydi
+PASS  3.14 Takroriy nom (katta-kichik/bo‘shliqsiz) rad etiladi
+PASS  3.15 Ikkinchi kino noyob kod bilan qo‘shildi
+PASS  3.16 Bekor qilish jarayonni to‘xtatadi (kino qo‘shilmadi)
+PASS  3.17 Bekordan so‘ng matn oddiy qidiruv sifatida ishlaydi
+PASS  3.18 To‘liq admin ham kino qo‘sha oladi
+PASS  3.19 Kino admini ro‘yxatida faqat o‘zi qo‘shganlar
+PASS  3.20 Kino admini boshqa admin kinosini ko‘ra olmaydi
+PASS  3.21 Kino admini boshqa admin kinosini o‘chira olmaydi (callbackni qo‘lda yuborsa ham)
+PASS  3.22 Kod orqali o‘chirishda ham boshqa admin kinosi himoyalangan
+PASS  3.23 O‘chirishdan oldin tasdiq so‘raladi
+PASS  3.24 O‘z kinosi o‘chirildi
+PASS  3.25 To‘liq admin barcha kinolarni ko‘radi
+PASS  3.26 Ro‘yxatdan tanlab o‘chirish tugmasi bor
+PASS  3.27 Asosiy admin kino qo‘shdi
+PASS  3.28 Admin amallari statistikada loglandi
+PASS  4.1 🎬 Kino qidirish tugmasi
+PASS  4.2 Bitta belgi, topilmadi → namuna xabar
+PASS  4.3 Natija yo‘q xabari
+PASS  4.4 Katta-kichik harf va ortiqcha bo‘shliqsiz qidiruv
+PASS  4.5 Natijalar inline tugmalarda, tugmada kino nomi
+PASS  4.6 Nomning bir qismi bo‘yicha qidiruv
+PASS  4.7 Aniq nom → 1 natija
+PASS  4.8 Kod bo‘yicha aniq qidiruv
+PASS  4.9 Qisman kod ('1') kodga mos kelmaydi, nom bo‘yicha qidiriladi ('Astral 1')
+PASS  4.10 Noma'lum buyruq tushunarli javob oladi
+PASS  4.11 Stiker yuborilsa tushunarli javob
+PASS  5.1 Kino video sifatida yuborildi (file_id orqali)
+PASS  5.2 Video ostida nom va tavsif
+PASS  5.3 Ko‘rishlar soni oshdi
+PASS  5.4 Qayta ko‘rish ko‘rishlar sonini oshiradi, ko‘rilgan kinolar takrorlanmaydi
+PASS  5.5 O‘chirilgan/yo‘q kino uchun tushunarli xabar
+PASS  5.6 Profil: ID, ism, username, sana, VIP holati, ko‘rgan kinolar
+PASS  5.7 Usernamesiz foydalanuvchi profili xatosiz (—)
+PASS  5.8 Kanallar yo‘q holati
+PASS  6.1 Majburiy obuna menyusi to‘liq adminga ochiq
+PASS  6.2 Noto‘g‘ri kanal formati
+PASS  6.3 Mavjud bo‘lmagan kanal rad etiladi
+PASS  6.4 Ochiq kanal qo‘shildi (havola avtomatik)
+PASS  6.5 Guruh chat ID orqali (username bilan) qo‘shildi
+PASS  6.6 Takroriy kanal qo‘shilmaydi
+PASS  6.7 Bot administrator bo‘lmagan kanal rad etiladi
+PASS  6.8 Private oqimda ochiq kanalni qo‘shib bo‘lmaydi (yoki allaqachon bor)
+PASS  6.9 Private kanal: invite link so‘raladi
+PASS  6.10 Noto‘g‘ri invite havolasi rad etiladi
+PASS  6.11 Private kanal: join-request havolasi avtomatik yaratildi
+PASS  6.12 channels.json maydonlari
+PASS  6.13 Kanallar ro‘yxati (3 ta)
+PASS  6.14 Kanal ma'lumotlarini tekshirish (bot huquqi)
+PASS  6.15 Bot huquqi yo‘qolsa, tekshiruv ogohlantiradi
+PASS  7.1 A'zo bo‘lmagan foydalanuvchiga kino yuborilmadi
+PASS  7.2 Obuna oynasi matni (3 ta kanal)
+PASS  7.3 Har bir kanal uchun URL tugma + 🔄 Tekshirish
+PASS  7.4 Private kanal havolasi ham ko‘rsatildi
+PASS  7.5 Join request qayd etildi (join_requests.json)
+PASS  7.6 Faqat join request yuborish a‘zolik hisoblanmaydi — kino yuborilmadi
+PASS  7.7 Faqat private kanal qoldi (2 ta a‘zo bo‘lgan kanal yo‘qoldi)
+PASS  7.8 Join request yuborgan kanal ⏳ belgisi bilan
+PASS  7.9 Tekshirish tugmasi qayta-qayta bosilganda to‘g‘ri ishlaydi (yuborilmaydi, xato bermaydi)
+PASS  7.10 Tasdiqlangandan keyin haqiqiy a‘zolik tekshirilib kino yuborildi
+PASS  7.11 Join request yozuvi tozalandi
+PASS  7.12 Qayta tekshirish: har safar bitta kino (dublikat himoyasi tugma bosilishiga bog‘liq)
+PASS  8.1 3 ta kanaldan 2 tasiga a‘zo → faqat 1 ta kanal ko‘rsatiladi
+PASS  8.2 Barcha kanallarga a‘zo bo‘lgach kino yuborildi
+PASS  8.3 Kanaldan chiqib ketgan foydalanuvchidan qayta obuna talab qilinadi
+PASS  8.4 Kanaldan ban qilingan foydalanuvchi a‘zo hisoblanmaydi
+PASS  8.5 📢 Obuna kanallari: holat ✅/❌ ko‘rsatiladi
+PASS  8.6 Kanallar ro‘yxatida a‘zo bo‘lgan kanallar belgilanadi
+PASS  8.7 Obuna tizimi o‘chirilsa, tekshiruvsiz kino yuboriladi
+PASS  8.8 Obuna qayta yoqildi
+PASS  8.9 Kanal sozlamasi buzilsa foydalanuvchi qamalib qolmaydi va adminga ogohlantirish ketadi
+PASS  8.10 Telegram tarmoq xatosida bot qulamaydi, foydalanuvchiga tushunarli xabar
+PASS  10.1 VIP bo‘limi matni va tariflar
+PASS  10.2 Tariflar alohida inline tugmalarda
+PASS  10.3 Karta ma'lumotlari kiritilmagan bo‘lsa tushunarli xabar
+PASS  10.4 Noto‘g‘ri karta raqami rad etiladi
+PASS  10.5 Karta raqami saqlandi (4 talik guruhlar)
+PASS  10.6 Noto‘g‘ri username rad etiladi
+PASS  10.7 Sozlamalar settings.json ga yozildi
+PASS  10.8 Karta raqami logga yozilmadi
+PASS  10.9 Karta egasi, karta raqami, izoh ko‘rsatildi
+PASS  10.10 Chek talabi, 30 daqiqa va ogohlantirish matni
+PASS  10.11 Karta raqami va ismni nusxalash tugmalari
+PASS  10.12 Tanlangan tarif saqlandi (awaiting_receipt)
+PASS  10.13 Muddat: yaratilgandan 30 daqiqa keyin
+PASS  10.14 Qayta tarif tanlash mumkin: eski so‘rov bekor, yangisi faol
+PASS  11.1 Matn chek sifatida qabul qilinmaydi
+PASS  11.2 Stiker qabul qilinmaydi
+PASS  11.3 Video qabul qilinmaydi
+PASS  11.4 Fayl (PDF) qabul qilinmaydi
+PASS  11.5 Chek yuborilmaguncha so‘rov adminga ketmagan
+PASS  11.6 Chek kutayotganda kino qidirish ishlaydi
+PASS  11.7 Chek rasmi qabul qilindi
+PASS  11.8 Chek asosiy adminga yuborildi (rasm)
+PASS  11.9 Admin xabarida: ism, ID, username, tarif, summa, vaqt
+PASS  11.10 ✅ Tasdiqlash / ❌ Rad etish tugmalari
+PASS  11.11 Holat pending, receipt_file_id saqlandi
+PASS  11.12 payments.json maydonlari
+PASS  11.13 So‘rov ko‘rib chiqilayotganda yangi tarif tanlab bo‘lmaydi
+PASS  13.1 Tasdiqlashda izoh so‘raladi
+PASS  13.2 To‘lov holati approved, reviewed_by va izoh saqlandi
+PASS  13.3 VIP boshlanish/tugash sanasi saqlandi (UTC, 2 kalendar oy)
+PASS  13.4 Foydalanuvchi VIP muddati users.json da
+PASS  13.5 Foydalanuvchiga tabrik xabari (tarif, sana, admin izohi)
+PASS  13.6 Takroriy tasdiqlashdan himoya
+PASS  13.7 Tasdiqlangan to‘lovni rad etib bo‘lmaydi
+PASS  9.1 VIP foydalanuvchi obunasiz (kanallarga a‘zo bo‘lmasdan) kino oladi
+PASS  9.2 VIP uchun kanallar ro‘yxati so‘ralmaydi
+PASS  9.3 Profilda VIP badge va tugash sanasi
+PASS  9.4 VIP bo‘limida faol VIP muddati ko‘rsatiladi
+PASS  12.1 Uzaytirish qoidasi: eski tugash sanasi ustiga qo‘shiladi
+PASS  14.1 Rad etishda sabab so‘raladi
+PASS  14.2 Foydalanuvchiga aynan admin yozgan sabab yuborildi
+PASS  14.3 Holat rejected, VIP berilmadi
+PASS  14.4 Rad etilgandan keyin qayta so‘rov yuborish mumkin
+PASS  14.5 Admin izoh bosqichida orqaga qaytsa so‘rov pending qoladi
+PASS  14.6 Holat tozalangach matn to‘lovni tasdiqlamaydi
+PASS  14.7 VIP boshqaruvida kutilayotgan to‘lovlar soni
+PASS  14.8 Kutilayotgan to‘lov qayta yuborildi (tugmalar bilan)
+PASS  14.9 Qayta to‘lov tasdiqlandi
+PASS  12.2 Muddat o‘tgach chek qabul qilinmaydi
+PASS  12.3 Kech chek adminga yuborilmadi
+PASS  12.4 Muddati tugagan so‘rov avtomatik bekor qilindi
+PASS  12.5 Foydalanuvchiga xabar yuborildi
+PASS  12.6 Xabar takrorlanmaydi
+PASS  12.7 Muddati tugagach chek kutish holati yo‘q (qidiruv ishlaydi)
+PASS  12.8 Server qayta ishga tushganda to‘lov vaqti saqlanadi
+PASS  15.1 Muddat o‘tgan zahoti is_vip=False (har so‘rovda tekshiriladi)
+PASS  15.2 Muddati tugagan VIP dan majburiy obuna qayta so‘raladi
+PASS  15.3 Fon vazifasi VIP ni oddiyga aylantirdi va xabar yubordi
+PASS  15.4 Profilda oddiy foydalanuvchi
+PASS  15.5 2 kalendar oy: 31-yanvar → 31-mart
+PASS  15.6 1 oy: 31-yanvar → 28-fevral (kabisa bo‘lmagan yil)
+PASS  15.7 Kabisa yil: 29-fevral + 1 yil → 28-fevral
+PASS  15.8 1 yillik tarif: 12 kalendar oy
+PASS  15.9 15 va 30 kunlik tariflar kun hisobida
+PASS  V.1 To‘liq admin qo‘lda VIP berishda tarif tanlaydi
+PASS  V.2 Qo‘lda VIP berildi
+PASS  V.3 VIP uzaytirildi (username bo‘yicha topildi, eski muddat ustiga)
+PASS  V.4 VIP foydalanuvchilar ro‘yxati
+PASS  V.5 VIP bekor qilindi
+PASS  V.6 Noma'lum foydalanuvchiga VIP berib bo‘lmaydi
+PASS  V.7 VIP grantlar vip.json da (statusi bilan)
+PASS  17.1 Kino admini statistikani ko‘ra olmaydi
+PASS  17.2 To‘liq admin statistika menyusini ko‘radi
+PASS  17.3 Foydalanuvchilar: umumiy, bugun, VIP, oddiy
+PASS  17.4 Foydalanuvchilar statistikasida «Kecha qo‘shilgan»
+PASS  17.4 Foydalanuvchilar statistikasida «Oxirgi 7 kunda»
+PASS  17.4 Foydalanuvchilar statistikasida «Oxirgi 30 kunda»
+PASS  17.4 Foydalanuvchilar statistikasida «Faol»
+PASS  17.4 Foydalanuvchilar statistikasida «Botni bloklagan»
+PASS  17.5 Botni bloklagan foydalanuvchi hisoblanadi
+PASS  17.6 Kino statistikasi: soni, top ko‘rilganlar
+PASS  17.7 Bugun / 7 / 30 kunda qo‘shilgan kinolar
+PASS  17.8 Har bir kinoning ko‘rishlar soni
+PASS  17.9 Faollik: bugungi/haftalik/oylik, eng faol vaqt/kun, soat bo‘yicha
+PASS  17.10 VIP statistikasi: tasdiqlangan, rad etilgan, kutilayotgan
+PASS  17.11 Jami tushum aniq hisoblangan (2 oylik 30 000 + 15 kunlik 10 000)
+PASS  17.12 Tariflar bo‘yicha sotuvlar (rad etilgan 1 yillik sanalmaydi)
+PASS  17.13 Admin statistikasi: har bir admin qo‘shgan kinolar va amallar
+PASS  17.14 Yangi bot: faollik faqat haqiqiy qayd etilgan hodisalarni ko‘rsatadi (taxminiy raqam yo‘q)
+PASS  17.15 Hodisa umuman yo‘q bo‘lsa «ma'lumot to‘planmagan» deyiladi
+PASS  18.1 Backup ZIP asosiy adminga yuborildi
+PASS  18.2 Backup boshqa hech kimga yuborilmadi
+PASS  18.3 ZIP ichida barcha JSON fayllar
+PASS  18.4 ZIP dagi ma'lumot joriy holatga teng
+PASS  18.5 ZIP faylidagi JSON fayllar yaroqli UTF-8
+PASS  18.6 Admin 2001 backup ola olmaydi
+PASS  18.6 Admin 2002 backup ola olmaydi
+PASS  18.7 Tiklashda ZIP bo‘lmagan kiritish rad etiladi
+PASS  18.8 Yaroqsiz arxiv rad etiladi
+PASS  18.9 Yaroqli arxiv tekshirildi, tasdiq so‘raladi
+PASS  18.10 Tiklashdan oldin joriy holat backupi yuborildi
+PASS  18.11 Ma'lumotlar tiklandi
+PASS  18.12 Tiklangan ma'lumot diskka yozildi
+PASS  18.13 Asosiy admin tiklashdan keyin ham asosiy
+PASS  18.14 To‘liq admin tiklay olmaydi
+PASS  18.15 Arxivdagi begona fayl nomlari e'tiborga olinmaydi
+PASS  20.1 Barcha JSON ma'lumotlar bayt-baytga o‘zgarishsiz tiklandi
+PASS  20.2 Kutilayotgan to‘lovlar saqlandi
+PASS  20.3 Muddati tugamagan VIPlar saqlandi
+PASS  20.4 Kino kodi hisoblagichi davom etadi (kodlar takrorlanmaydi)
+PASS  20.5 Join requestlar va kanallar saqlandi
+PASS  20.6 Qayta ishga tushgandan keyin bot qidiruvga javob beradi
+PASS  20.7 (kutilayotgan to‘lov yo‘q — o‘tkazib yuborildi)
+PASS  19.1 UTF-8: Unicode to‘g‘ri saqlanadi
+PASS  19.2 Yozishdan keyin .tmp qolmaydi
+PASS  19.3 Oldingi versiya .bak sifatida saqlanadi
+PASS  19.4 200 ta parallel yozuvdan keyin hech bir ma'lumot yo‘qolmadi
+PASS  19.5 Buzilgan JSON .bak dan avtomatik tiklanadi
+PASS  19.6 Ikkala nusxa buzilsa bot qulamaydi, bo‘sh holat va buzilgan fayl nusxasi saqlanadi
+PASS  19.7 Noto‘g‘ri turdagi JSON (list o‘rniga dict) rad etiladi
+PASS  19.8 Eski settings.json ga yangi kalitlar qo‘shiladi (migratsiya)
+PASS  19.9 Disk xatosida bot qulamaydi va qayta urinish uchun dirty belgilanadi
+PASS  19.10 Xato bartaraf bo‘lgach flush yozadi
+PASS  19.11 Snapshot barcha JSON fayllarni qamrab oladi
+PASS  B.1 Admin 2001 broadcastdan foydalana olmaydi: adm:bc
+PASS  B.1 Admin 2001 broadcastdan foydalana olmaydi: adm:bc_new
+PASS  B.1 Admin 2001 broadcastdan foydalana olmaydi: adm:bc_ok
+PASS  B.1 Admin 2001 broadcastdan foydalana olmaydi: adm:bc_stop
+PASS  B.1 Admin 2002 broadcastdan foydalana olmaydi: adm:bc
+PASS  B.1 Admin 2002 broadcastdan foydalana olmaydi: adm:bc_new
+PASS  B.1 Admin 2002 broadcastdan foydalana olmaydi: adm:bc_ok
+PASS  B.1 Admin 2002 broadcastdan foydalana olmaydi: adm:bc_stop
+PASS  B.2 Asosiy adminda Broadcast bo‘limi
+PASS  B.3 Noto‘g‘ri format tushunarli xabar
+PASS  B.4 Preview ko‘rsatildi + tasdiqlash/bekor tugmalari
+PASS  B.5 Preview xabarning o‘zi (formatlash bilan) ko‘rsatildi
+PASS  B.6 Bekor qilinsa yuborilmaydi
+PASS  B.7 Tasdiqlanganda broadcast alohida task sifatida boshlandi
+PASS  B.8 Broadcast davomida bot boshqa so‘rovlarga javob beradi
+PASS  B.9 Hisobot asosiy adminga yuborildi
+PASS  B.10 Hisobot: jami
+PASS  B.11 Hisobot: bloklagan = 1, boshqa xato = 1, yuborilmagan = 2
+PASS  B.12 Muvaffaqiyatli = jami − 2 (FloodWait dan keyin qayta urinildi)
+PASS  B.13 Bloklagan foydalanuvchi is_blocked=True
+PASS  B.14 Hech kim ikki marta olmadi (FloodWap qayta urinishi bundan mustasno)
+PASS  B.15 Holat broadcast.json da saqlandi (tarix)
+PASS  B.16 Rasm + caption preview
+PASS  B.17 Rasm hamma foydalanuvchiga yuborildi
+PASS  B.18 Video + caption hamma foydalanuvchiga yuborildi
+PASS  B.19 Juda uzun matn rad etiladi
+PASS  B.20 Restartdan keyin yarim qolgan broadcast 'running' holatda tiklandi
+PASS  B.21 Davom ettirilganda faqat qolgan foydalanuvchilarga yuborildi (dublikatsiz)
+PASS  B.22 Resume haqida admin xabardor qilindi
+PASS  B.23 To‘xtatilgan broadcast 'cancelled' holatda hisobot beradi
+PASS  M.1 Description/nom HTML escape qilinadi (injeksiya yo‘q)
+PASS  M.2 Bot tokeni logdan olib tashlanadi
+PASS  M.3 FloodWait kino yuborishda avtomatik qayta uriniladi (bir marta kutib, kino yetkazildi)
+PASS  M.4 Bloklagan foydalanuvchiga xabar xatosi ushlanadi va is_blocked belgilanadi
+PASS  M.5 Foydalanuvchi qaytib kelsa is_blocked=False
+PASS  M.6 my_chat_member (kicked) → bloklagan deb belgilanadi
+PASS  M.7 Guruh xabarlari foydalanuvchi sifatida ro‘yxatga olinmaydi
+PASS  M.8 PaymentManager.approve takror chaqirilsa faqat bir marta VIP beradi
+PASS  M.9 Rad etilgan/tasdiqlangan so‘rovni rad etib bo‘lmaydi
+PASS  M.10 Soxta/yaroqsiz callback bot ishini buzmaydi: adm:mv_i:abc
+PASS  M.10 Soxta/yaroqsiz callback bot ishini buzmaydi: adm:mv_i:999999
+PASS  M.10 Soxta/yaroqsiz callback bot ishini buzmaydi: adm:ch_i:555
+PASS  M.10 Soxta/yaroqsiz callback bot ishini buzmaydi: adm:ch_xy:555
+PASS  M.10 Soxta/yaroqsiz callback bot ishini buzmaydi: adm:vip_g:1:zzz
+PASS  M.10 Soxta/yaroqsiz callback bot ishini buzmaydi: adm:ad_i:9
+PASS  M.10 Soxta/yaroqsiz callback bot ishini buzmaydi: pay_ok:NOPE
+PASS  M.10 Soxta/yaroqsiz callback bot ishini buzmaydi: mv:notanumber
+PASS  M.10 Soxta/yaroqsiz callback bot ishini buzmaydi: chk:zzz
+PASS  M.11 O‘chirilgan kinoning eski tugmasi tushunarli xabar beradi
+PASS  M.12 Allaqachon o‘chirilgan kinoni qayta o‘chirish xato bermaydi
+PASS  M.13 Asosiy admin hech kim tomonidan (o‘zi ham) olib tashlanmaydi
+PASS  M.14 Vaqt server zonasiga emas UTC ga bog‘liq
+PASS  M.15 Xabarni tahrirlab bo‘lmasa yangi xabar yuboriladi (interfeys qotmaydi)

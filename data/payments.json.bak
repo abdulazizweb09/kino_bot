@@ -1,0 +1,36 @@
+{
+ "P00001": {
+  "payment_id": "P00001",
+  "user_id": 6234512842,
+  "plan": "d15",
+  "amount": 10000,
+  "receipt_file_id": "AgACAgIAAxkBAAMmawamuLCYMxRMHwABuQSAS0albYHVAAKyGmsbw1U5SNyKH0aa60XaAQADAgADeQADPQQ",
+  "status": "rejected",
+  "created_at": "2026-11-25T09:13:12+00:00",
+  "expires_at": "2026-11-25T09:43:12+00:00",
+  "reviewed_by": 7441716386,
+  "admin_comment": "kot",
+  "receipt_sent_at": "2026-11-25T09:13:29+00:00",
+  "admin_chat_id": 7441716386,
+  "admin_message_id": 40,
+  "reviewed_at": "2026-11-25T09:13:53+00:00"
+ },
+ "P00002": {
+  "payment_id": "P00002",
+  "user_id": 6234512842,
+  "plan": "d15",
+  "amount": 10000,
+  "receipt_file_id": "AgACAgIAAxkBAAMvawam5PQ7SjAj66a913mQYV22F60AArQaaxvDVTlIxIxCOgQUvXABAAMCAAN5AAM9BA",
+  "status": "approved",
+  "created_at": "2026-11-25T09:14:07+00:00",
+  "expires_at": "2026-11-25T09:44:07+00:00",
+  "reviewed_by": 7441716386,
+  "admin_comment": ".",
+  "receipt_sent_at": "2026-11-25T09:14:12+00:00",
+  "admin_chat_id": 7441716386,
+  "admin_message_id": 49,
+  "reviewed_at": "2026-11-25T09:14:32+00:00",
+  "vip_start": "2026-11-25T09:14:32+00:00",
+  "vip_end": "2026-12-10T09:14:32+00:00"
+ }
+}

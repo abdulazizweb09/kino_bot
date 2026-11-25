@@ -1,0 +1,16 @@
+{
+ "grants": {
+  "G00001": {
+   "grant_id": "G00001",
+   "user_id": 6234512842,
+   "plan": "d15",
+   "source": "payment",
+   "granted_by": 7441716386,
+   "payment_id": "P00002",
+   "granted_at": "2026-11-25T09:14:32+00:00",
+   "start_at": "2026-11-25T09:14:32+00:00",
+   "end_at": "2026-12-10T09:14:32+00:00",
+   "status": "active"
+  }
+ }
+}

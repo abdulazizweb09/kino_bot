@@ -1,0 +1,52 @@
+{
+ "usage_by_day": {
+  "2026-11-25": 57
+ },
+ "usage_by_hour": {
+  "08": 10,
+  "09": 47
+ },
+ "usage_by_weekday": {
+  "2": 57
+ },
+ "admin_action_counts": {
+  "7441716386": {
+   "setting_change": 2,
+   "payment_reject": 1,
+   "payment_approve": 1,
+   "movie_add": 1
+  }
+ },
+ "admin_log": [
+  {
+   "ts": "2026-11-25T09:12:09+00:00",
+   "admin_id": 7441716386,
+   "action": "setting_change",
+   "details": "card_holder"
+  },
+  {
+   "ts": "2026-11-25T09:12:54+00:00",
+   "admin_id": 7441716386,
+   "action": "setting_change",
+   "details": "card_number"
+  },
+  {
+   "ts": "2026-11-25T09:13:53+00:00",
+   "admin_id": 7441716386,
+   "action": "payment_reject",
+   "details": "P00001 user=6234512842"
+  },
+  {
+   "ts": "2026-11-25T09:14:32+00:00",
+   "admin_id": 7441716386,
+   "action": "payment_approve",
+   "details": "P00002 user=6234512842"
+  },
+  {
+   "ts": "2026-11-25T09:16:30+00:00",
+   "admin_id": 7441716386,
+   "action": "movie_add",
+   "details": "1001 test"
+  }
+ ]
+}
