@@ -18,6 +18,7 @@ import contextlib
 import copy
 import html
 import io
+import ipaddress
 import json
 import logging
 import os
@@ -30,6 +31,7 @@ from datetime import datetime, timedelta, timezone
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Optional
+from urllib.parse import urlparse
 
 from aiogram import BaseMiddleware, Bot, Dispatcher, F, Router
 from aiogram.client.default import DefaultBotProperties
@@ -42,7 +44,7 @@ from aiogram.exceptions import (
     TelegramRetryAfter,
     TelegramServerError,
 )
-from aiogram.filters import BaseFilter, Command, CommandStart
+from aiogram.filters import BaseFilter, Command, CommandObject, CommandStart, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
@@ -77,13 +79,13 @@ ROLE_LABELS = {
 }
 ROLE_DESCRIPTIONS = {
     ROLE_MOVIE: "kino qo‘shish; faqat o‘zi qo‘shgan kinolarni ko‘rish va o‘chirish",
-    ROLE_FULL: "kino boshqaruvi (hamma kino), majburiy obuna, statistika, admin boshqaruvi (faqat kino adminlari), VIP boshqaruvi",
+    ROLE_FULL: "kino boshqaruvi (hamma kino), majburiy obuna, statistika, admin boshqaruvi (faqat kino adminlari), VIP boshqaruvi, kanalga post joylash",
     ROLE_MAIN: "barcha huquqlar: to‘lovlarni tasdiqlash, backup/tiklash, sozlamalar, broadcast, rollarni o‘zgartirish",
 }
 
 _MOVIE_PERMS = {"movie_menu", "movie_add", "movie_view_own", "movie_delete_own"}
 _FULL_PERMS = _MOVIE_PERMS | {
-    "movie_view_all", "movie_delete_all", "channels", "stats", "admins", "vip",
+    "movie_view_all", "movie_delete_all", "channels", "stats", "admins", "vip", "channel_post",
 }
 _MAIN_PERMS = _FULL_PERMS | {
     "payments", "backup", "restore", "settings", "broadcast", "admin_roles", "admin_manage_full",
@@ -114,6 +116,18 @@ BTN_VIP = "💎 VIP obuna"
 BTN_CHANNELS = "📢 Obuna kanallari"
 BTN_PROFILE = "👤 Profilim"
 BTN_ADMIN = "🛠 Admin panel"
+
+# Admin panelning asosiy menyusi (ReplyKeyboardMarkup) tugmalari
+ADM_BTN_MOVIES = "🎬 Kino boshqaruvi"
+ADM_BTN_CHANNELS = "📢 Majburiy obuna"
+ADM_BTN_STATS = "📊 Statistika"
+ADM_BTN_ADMINS = "👮 Admin boshqaruvi"
+ADM_BTN_VIP = "💎 VIP boshqaruvi"
+ADM_BTN_POST = "📢 Kanalga post joylash"
+ADM_BTN_BACKUP = "💾 Backup"
+ADM_BTN_SETTINGS = "⚙️ Sozlamalar"
+ADM_BTN_BROADCAST = "📣 Broadcast"
+ADM_BTN_BACK = "⬅️ Asosiy menyu"
 MENU_BUTTONS = {BTN_SEARCH, BTN_VIP, BTN_CHANNELS, BTN_PROFILE, BTN_ADMIN}
 
 WEEKDAYS_UZ = ["Dushanba", "Seshanba", "Chorshanba", "Payshanba", "Juma", "Shanba", "Yakshanba"]
@@ -126,10 +140,11 @@ DEFAULT_SETTINGS = {
     "card_number": "",
     "payment_note": "",
     "next_movie_id": 1,
-    "next_movie_code": 1001,
+    "next_movie_code": 11,          # kino kodlari 11 dan boshlanadi; hisoblagich faqat oshadi (o'chirilgan kodlar qayta berilmaydi)
     "next_payment_no": 1,
     "next_grant_no": 1,
     "next_broadcast_no": 1,
+    "next_post_no": 1,
 }
 DEFAULT_STATS = {
     "usage_by_day": {},
@@ -149,6 +164,7 @@ DEFAULT_DATA: dict[str, Any] = {
     "settings": DEFAULT_SETTINGS,
     "join_requests": {},
     "broadcast": {"current": None, "history": []},
+    "channel_posts": {},
 }
 MERGE_DEFAULTS = {"vip", "statistics", "settings", "broadcast"}
 
@@ -268,7 +284,7 @@ class JsonDB:
 
     FILES = (
         "users", "movies", "admins", "channels", "vip", "payments",
-        "statistics", "settings", "join_requests", "broadcast",
+        "statistics", "settings", "join_requests", "broadcast", "channel_posts",
     )
 
     def __init__(self, directory: str | Path):
@@ -450,6 +466,18 @@ class MovieManager:
         if not unique_id:
             return None
         return next((m for m in self.items.values() if m.get("file_unique_id") == unique_id), None)
+
+    def sync_code_counter(self) -> None:
+        """Hisoblagich hech qachon mavjud kodlardan past bo'lmasin (buzilish/eski backup holatlaridan himoya).
+        Eski standart (1001) bilan o'rnatilgan, lekin hali birorta kino qo'shilmagan bot 11 dan boshlaydi."""
+        s = self.app.settings
+        if not self.items and s.get("next_movie_code") == 1001:
+            s["next_movie_code"] = 11
+            self.app.db.touch("settings")
+        top = max((int(m["code"]) for m in self.items.values() if str(m.get("code", "")).isdigit()), default=0)
+        if s["next_movie_code"] <= top:
+            s["next_movie_code"] = top + 1
+            self.app.db.touch("settings")
 
     def _next_code(self) -> str:
         s = self.app.settings
@@ -1009,8 +1037,14 @@ class BackupManager:
         return texts
 
     def restore(self, texts: dict[str, str]) -> None:
+        old = {k: v for k, v in self.app.settings.items() if k.startswith("next_") and isinstance(v, int)}
         self.app.db.replace_all(texts)
+        for k, v in old.items():  # hisoblagichlar orqaga qaytmasin: o'chirilgan kod/ID lar qayta berilmaydi
+            if self.app.settings.get(k, 0) < v:
+                self.app.settings[k] = v
+        self.app.settings.setdefault("next_post_no", 1)
         self.app.admins.ensure_main()
+        self.app.movies.sync_code_counter()
 
 
 class BroadcastManager:
@@ -1118,6 +1152,63 @@ class BroadcastManager:
         await self.app.db.save_many("broadcast", "users")
 
 
+class PostManager:
+    """Kanalga post joylash: qoralamalar va yuborish holati (channel_posts.json).
+    Holatlar: draft → sending → sent | failed | uncertain; draft/failed → cancelled."""
+
+    DRAFT_TTL = 3600          # preview 1 soat amal qiladi
+    KEEP = 200                # JSON da saqlanadigan postlar soni
+
+    def __init__(self, app: "App"):
+        self.app = app
+
+    @property
+    def items(self) -> dict[str, dict]:
+        return self.app.db.data["channel_posts"]
+
+    def get(self, pid: str) -> Optional[dict]:
+        return self.items.get(pid)
+
+    def recover_after_restart(self) -> None:
+        """Bot yuborish paytida to'xtagan bo'lsa, post yuborilgan-yuborilmaganligi noma'lum: qayta yuborilmaydi."""
+        for p in self.items.values():
+            if p["status"] == "sending":
+                p["status"] = "uncertain"
+                p["error"] = "Bot qayta ishga tushdi: post yuborilgan-yuborilmaganligi noma'lum."
+                self.app.db.touch("channel_posts")
+
+    def create(self, admin_id: int, channel: dict, media_type: str, file_id: str, text_html: str,
+               button: dict, preview_mid: Optional[int]) -> dict:
+        s = self.app.settings
+        no = s["next_post_no"]
+        s["next_post_no"] += 1
+        p = {
+            "post_id": f"PO{no:05d}", "admin_id": admin_id,
+            "channel_id": channel["id"], "channel_title": channel["title"],
+            "channel_username": channel.get("username"), "channel_type": channel.get("type"),
+            "media_type": media_type, "file_id": file_id, "text_html": text_html, "button": button,
+            "status": "draft", "attempts": 0, "created_at": iso(utcnow()), "sent_at": None,
+            "message_id": None, "error": None, "preview_message_id": preview_mid,
+        }
+        self.items[p["post_id"]] = p
+        self.prune()
+        return p
+
+    def is_expired_draft(self, p: dict) -> bool:
+        dt = parse_iso(p["created_at"])
+        return p["status"] in ("draft", "failed") and bool(dt) and (utcnow() - dt).total_seconds() > self.DRAFT_TTL
+
+    def prune(self) -> None:
+        for pid in [k for k, p in self.items.items() if p["status"] in ("draft", "cancelled", "failed")
+                    and (parse_iso(p["created_at"]) or utcnow()) < utcnow() - timedelta(days=2)]:
+            del self.items[pid]
+        extra = len(self.items) - self.KEEP
+        if extra > 0:
+            for pid in sorted((k for k, p in self.items.items() if p["status"] != "sending"),
+                              key=lambda k: self.items[k]["created_at"])[:extra]:
+                del self.items[pid]
+
+
 # =====================================================================
 # 5. ILOVA KONTEYNERI
 # =====================================================================
@@ -1134,7 +1225,11 @@ class App:
         self.stats = StatisticsManager(self)
         self.backup = BackupManager(self)
         self.broadcast = BroadcastManager(self)
+        self.posts = PostManager(self)
         self.admins.ensure_main()
+        self.posts.recover_after_restart()
+        self.movies.sync_code_counter()
+        self.bot_username: Optional[str] = None
         self.user_locks: dict[int, asyncio.Lock] = {}
         self.broadcast_task: Optional[asyncio.Task] = None
         self.restore_buffer: dict[int, dict[str, str]] = {}
@@ -1151,6 +1246,32 @@ class App:
 
 
 APP: App = None  # type: ignore[assignment]
+
+USERNAME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]{3,31}$")
+MOVIE_START_RE = re.compile(r"^movie_(\d{1,12})$")
+
+
+async def ensure_bot_username(bot: Bot) -> Optional[str]:
+    """BOT_USERNAME (.env) yoki Telegram API (getMe) orqali bot usernamesini aniqlaydi."""
+    if APP.bot_username:
+        return APP.bot_username
+    env = os.getenv("BOT_USERNAME", "").strip().lstrip("@")
+    if USERNAME_RE.match(env):
+        APP.bot_username = env
+        return env
+    try:
+        me = await tg_retry(lambda: bot.get_me())
+    except TelegramAPIError as e:
+        logger.error("Bot usernamesini aniqlab bo‘lmadi: %s", e)
+        return None
+    APP.bot_username = me.username
+    return APP.bot_username
+
+
+async def movie_link(bot: Bot, code: str) -> Optional[str]:
+    """Kino uchun deep link: https://t.me/BOT_USERNAME?start=movie_KOD"""
+    username = await ensure_bot_username(bot)
+    return f"https://t.me/{username}?start=movie_{code}" if username else None
 
 
 # =====================================================================
@@ -1205,14 +1326,28 @@ class RestoreSt(StatesGroup):
     zipfile = State()
 
 
+class PostSt(StatesGroup):
+    channel = State()
+    media = State()
+    text = State()
+    btn_kind = State()
+    url_title = State()
+    url_value = State()
+    movie_code = State()
+    movie_title = State()
+    confirm = State()
+
+
 def ikb(rows: list[list[tuple]]) -> InlineKeyboardMarkup:
-    """rows: [[(text, callback_data)], [(text, 'url', url)] ...]"""
+    """rows: [[(text, callback_data)], [(text, 'url', url)], [(text, 'copy', matn)] ...]"""
     out = []
     for row in rows:
         btns = []
         for b in row:
             if len(b) == 3 and b[1] == "url":
                 btns.append(InlineKeyboardButton(text=b[0], url=b[2]))
+            elif len(b) == 3 and b[1] == "copy":
+                btns.append(InlineKeyboardButton(text=b[0], copy_text=CopyTextButton(text=b[2][:256])))
             else:
                 btns.append(InlineKeyboardButton(text=b[0], callback_data=b[1]))
         out.append(btns)
@@ -1225,7 +1360,7 @@ CANCEL_ROW = [("❌ Bekor qilish", "adm:cancel")]
 def main_kb(is_admin: bool) -> ReplyKeyboardMarkup:
     rows = [
         [KeyboardButton(text=BTN_SEARCH), KeyboardButton(text=BTN_VIP)],
-        [KeyboardButton(text=BTN_CHANNELS), KeyboardButton(text=BTN_PROFILE)],
+        [KeyboardButton(text=BTN_PROFILE)],
     ]
     if is_admin:
         rows.append([KeyboardButton(text=BTN_ADMIN)])
@@ -1273,27 +1408,36 @@ async def notify_user(bot: Bot, uid: int, text: str, markup=None) -> bool:
     return False
 
 
-def panel_kb(role: str) -> InlineKeyboardMarkup:
-    rows = [[("🎬 Kino boshqaruvi", "adm:mv")]]
-    if has_perm(role, "channels"):
-        rows.append([("📢 Majburiy obuna", "adm:ch")])
-    if has_perm(role, "stats"):
-        rows.append([("📊 Statistika", "adm:st")])
-    if has_perm(role, "admins"):
-        rows.append([("👮 Admin boshqaruvi", "adm:ad")])
-    if has_perm(role, "vip"):
-        rows.append([("💎 VIP boshqaruvi", "adm:vip")])
-    if has_perm(role, "backup"):
-        rows.append([("💾 Backup", "adm:bk")])
-    if has_perm(role, "settings"):
-        rows.append([("⚙️ Bot sozlamalari", "adm:set")])
-    if has_perm(role, "broadcast"):
-        rows.append([("📣 Broadcast", "adm:bc")])
-    return ikb(rows)
+# (tugma matni, kerakli ruxsat) — tartib menyudagi tartib. Ruxsatlar ROLE_PERMS dan olinadi.
+ADMIN_MENU: list[tuple[str, str]] = [
+    (ADM_BTN_MOVIES, "movie_menu"),
+    (ADM_BTN_CHANNELS, "channels"),
+    (ADM_BTN_STATS, "stats"),
+    (ADM_BTN_ADMINS, "admins"),
+    (ADM_BTN_VIP, "vip"),
+    (ADM_BTN_POST, "channel_post"),
+    (ADM_BTN_BACKUP, "backup"),
+    (ADM_BTN_SETTINGS, "settings"),
+    (ADM_BTN_BROADCAST, "broadcast"),
+]
+
+
+def admin_kb(role: str) -> ReplyKeyboardMarkup:
+    """Admin panelning asosiy menyusi: faqat rolga ruxsat etilgan bo'limlar ko'rsatiladi."""
+    btns = [KeyboardButton(text=t) for t, perm in ADMIN_MENU if has_perm(role, perm)]
+    rows = [btns[i:i + 2] for i in range(0, len(btns), 2)]
+    rows.append([KeyboardButton(text=ADM_BTN_BACK)])
+    return ReplyKeyboardMarkup(keyboard=rows, resize_keyboard=True)
+
+
+async def ack(target: Message | CallbackQuery, text: Optional[str] = None, **kw) -> None:
+    """Callback bo'lsa javob beradi (Message uchun hech narsa qilmaydi)."""
+    if isinstance(target, CallbackQuery):
+        await target.answer(text, **kw)
 
 
 def panel_text(role: str) -> str:
-    return f"🛠 <b>Admin panel</b>\n\nRolingiz: {ROLE_LABELS[role]}"
+    return f"🛠 <b>Admin panel</b>\n\nRolingiz: {ROLE_LABELS[role]}\n\nBo‘limni pastdagi menyudan tanlang."
 
 
 def paginate(items: list, page: int, per: int = PAGE_SIZE) -> tuple[list, int, int]:
@@ -1325,9 +1469,11 @@ class ActivityMiddleware(BaseMiddleware):
     async def __call__(self, handler, event, data):
         tg_user = data.get("event_from_user")
         chat = data.get("event_chat")
+        data["is_new_user"] = False
         if tg_user and not tg_user.is_bot and (chat is None or chat.type == ChatType.PRIVATE):
             try:
                 _, is_new = APP.users.upsert(tg_user)
+                data["is_new_user"] = is_new
                 APP.stats.record_usage()
                 if is_new:
                     await APP.save("users")
@@ -1353,10 +1499,23 @@ for _r in (common, admin_r, user_r, search_r):
 # 9. FOYDALANUVCHI: /start, MENYU
 # =====================================================================
 @common.message(CommandStart())
-async def cmd_start(message: Message, state: FSMContext):
+async def cmd_start(message: Message, command: CommandObject, state: FSMContext, bot: Bot, is_new_user: bool = False):
     await state.clear()
     is_admin = APP.admins.role_of(message.from_user.id) is not None
-    await message.answer(start_text(), reply_markup=main_kb(is_admin))
+    payload = (command.args or "").strip()
+    if not payload.startswith("movie_"):
+        return await message.answer(start_text(), reply_markup=main_kb(is_admin))
+    # Kino havolasi: /start movie_11
+    if is_new_user:  # birinchi marta kirgan foydalanuvchiga menyu klaviaturasi ham beriladi
+        await message.answer(start_text(), reply_markup=main_kb(is_admin))
+    parsed = MOVIE_START_RE.match(payload)
+    movie = APP.movies.by_code(parsed.group(1)) if parsed else None
+    if not movie:
+        return await message.answer(
+            "❌ Bu havola bo‘yicha kino topilmadi.\n\n"
+            "Havola noto‘g‘ri, eskirgan yoki kino o‘chirilgan bo‘lishi mumkin. Kino nomini yoki kodini yozib qidirib ko‘ring.")
+    # Majburiy obuna / VIP qoidalari oddiy kino olish bilan bir xil (deliver_movie)
+    await deliver_movie(bot, message, message.from_user.id, str(movie["movie_id"]), edit_window=False)
 
 
 @common.message(Command("cancel"))
@@ -1598,42 +1757,20 @@ async def cb_movie(cb: CallbackQuery, bot: Bot):
 @user_r.callback_query(F.data.startswith("chk:"))
 async def cb_check(cb: CallbackQuery, bot: Bot):
     movie_id = cb.data.split(":", 1)[1]
-    if movie_id == "0":
-        return await show_channels(bot, cb)
+    if movie_id == "0":  # eski «Obuna kanallari» oynasidan qolgan tugma
+        return await cb.answer("ℹ️ Bu tugma eskirgan. Kino nomini yoki kodini yozing.", show_alert=True)
     await cb.answer()
     await deliver_movie(bot, cb, cb.from_user.id, movie_id, edit_window=True)
 
 
-async def show_channels(bot: Bot, target: Message | CallbackQuery) -> None:
-    uid = target.from_user.id
-    if not APP.settings.get("subscription_enabled", True) or not APP.subs.active_channels():
-        text, kb = "📢 Hozircha majburiy obuna kanallari yo‘q.", None
-    elif APP.users.is_vip(uid):
-        text, kb = "💎 Siz VIP foydalanuvchisiz — sizdan majburiy obuna talab qilinmaydi.", None
-    else:
-        try:
-            st = await APP.subs.statuses(bot, uid)
-        except SubCheckError:
-            text, kb = "⚠️ Tekshirishda vaqtinchalik xatolik. Birozdan so‘ng urinib ko‘ring.", None
-        else:
-            lines = "\n".join(f"{'✅' if ok else '❌'} {esc(c['title'])}" for c, ok in st)
-            text = f"📢 <b>Obuna kanallari</b>\n\n{lines}"
-            rows = [[(trunc(c["title"], 60), "url", c["invite_link"])] for c, ok in st if not ok]
-            rows.append([("🔄 Tekshirish", "chk:0")])
-            kb = ikb(rows)
-    if isinstance(target, CallbackQuery):
-        try:
-            await show(target, text, kb)
-        finally:
-            await target.answer()
-    else:
-        await target.answer(text, reply_markup=kb)
-
-
 @common.message(F.text == BTN_CHANNELS)
-async def menu_channels(message: Message, state: FSMContext, bot: Bot):
+async def menu_channels_legacy(message: Message, state: FSMContext):
+    """Eski klaviaturada qolib ketgan «Obuna kanallari» tugmasi: tugma olib tashlangan, menyu yangilanadi.
+    Kanalga obuna tugmalari faqat kino olish jarayonida ko'rsatiladi."""
     await state.clear()
-    await show_channels(bot, message)
+    is_admin = APP.admins.role_of(message.from_user.id) is not None
+    await message.answer("ℹ️ Menyu yangilandi. Majburiy obuna kanallari kinoni olish paytida ko‘rsatiladi.",
+                         reply_markup=main_kb(is_admin))
 
 
 async def do_search(message: Message, text: str) -> None:
@@ -1676,6 +1813,7 @@ PERM_LABELS = {
     "admins": "admin boshqaruvi", "vip": "VIP boshqaruvi", "payments": "to‘lovlarni tasdiqlash",
     "backup": "backup", "restore": "tiklash", "settings": "sozlamalar", "broadcast": "broadcast",
     "admin_roles": "rollarni o‘zgartirish", "admin_manage_full": "to‘liq adminlarni boshqarish",
+    "channel_post": "kanalga post joylash",
 }
 
 
@@ -1686,7 +1824,32 @@ async def admin_entry(message: Message, state: FSMContext):
     role = APP.admins.role_of(message.from_user.id)
     if not role:
         return await message.answer("⛔ Sizda admin huquqi yo‘q.")
-    await message.answer(panel_text(role), reply_markup=panel_kb(role))
+    await message.answer(panel_text(role), reply_markup=admin_kb(role))
+
+
+class IsAdmin(BaseFilter):
+    """Faqat admin yuborgan xabarlar o'tadi; oddiy foydalanuvchining matni qidiruvga tushadi."""
+
+    async def __call__(self, message: Message) -> bool:
+        return APP.admins.role_of(message.from_user.id) is not None
+
+
+@admin_r.message(IsAdmin(), F.text.in_({t for t, _ in ADMIN_MENU}))
+async def admin_section(message: Message, state: FSMContext):
+    """ReplyKeyboard orqali admin bo'limini ochish. Ruxsat server tomonida qayta tekshiriladi.
+    Bu handler FSM handlerlaridan oldin turadi: menyu tugmasi bosilsa joriy jarayon bekor qilinadi."""
+    await state.clear()
+    perm, render = ADMIN_SECTIONS[message.text]
+    if not await need(message, perm):
+        return
+    await render(message, state)
+
+
+@admin_r.message(F.text == ADM_BTN_BACK)
+async def admin_back(message: Message, state: FSMContext):
+    await state.clear()
+    is_admin = APP.admins.role_of(message.from_user.id) is not None
+    await message.answer("🏠 Asosiy menyu.", reply_markup=main_kb(is_admin))
 
 
 @admin_r.callback_query(F.data.in_({"adm:home", "adm:cancel"}))
@@ -1695,7 +1858,7 @@ async def adm_home(cb: CallbackQuery, state: FSMContext):
     role = APP.admins.role_of(cb.from_user.id)
     if not role:
         return await cb.answer("⛔ Ruxsat yo‘q.", show_alert=True)
-    await show(cb, panel_text(role), panel_kb(role))
+    await show(cb, panel_text(role))  # inline tugmalarsiz; asosiy menyu — pastdagi ReplyKeyboard
     await cb.answer("Bekor qilindi." if cb.data == "adm:cancel" else None)
 
 
@@ -1714,6 +1877,10 @@ def can_view(role: str, uid: int, m: dict) -> bool:
 
 @admin_r.callback_query(F.data == "adm:mv")
 async def mv_menu(cb: CallbackQuery, state: FSMContext):
+    await render_mv_menu(cb, state)
+
+
+async def render_mv_menu(cb: Message | CallbackQuery, state: Optional[FSMContext] = None):
     role = await guard(cb, "movie_menu", state)
     if not role:
         return
@@ -1726,7 +1893,7 @@ async def mv_menu(cb: CallbackQuery, state: FSMContext):
         [("⬅️ Orqaga", "adm:home")],
     ])
     await show(cb, f"🎬 <b>Kino boshqaruvi</b>\n\n{scope}", kb)
-    await cb.answer()
+    await ack(cb)
 
 
 # ---- kino qo'shish ----
@@ -1792,28 +1959,46 @@ async def mv_add_desc_bad(message: Message):
 
 
 @admin_r.message(MovieAdd.title, F.text)
-async def mv_add_title(message: Message, state: FSMContext):
+async def mv_add_title(message: Message, state: FSMContext, bot: Bot):
     role = await guard(message, "movie_add", state)
     if not role:
         return
     title = " ".join(message.text.split())
     if not title or len(title) > MAX_TITLE_LEN:
         return await message.answer(f"❗ Kino nomi 1–{MAX_TITLE_LEN} belgidan iborat bo‘lishi kerak.", reply_markup=ikb([CANCEL_ROW]))
+    data = await state.get_data()
+    # Tekshiruv va qo'shish orasida await yo'q: bir vaqtda qo'shilgan kinolarda ham nom/video/kod takrorlanmaydi
     if any(norm(m["title"]) == norm(title) for m in APP.movies.items.values()):
         return await message.answer(
             "⚠️ Bunday nomli kino allaqachon bor. Nomni aniqroq yozing (masalan, yil yoki qism raqamini qo‘shing).",
             reply_markup=ikb([CANCEL_ROW]))
-    data = await state.get_data()
     if not data.get("file_id") or APP.movies.by_unique(data.get("file_unique_id", "")):
         await state.clear()
         return await message.answer("⚠️ Jarayon buzildi yoki video takrorlangan. Qaytadan boshlang.", reply_markup=ikb([[("⬅️ Orqaga", "adm:mv")]]))
     m = APP.movies.add(title, data["description"], data["file_id"], data["file_unique_id"], message.from_user.id)
-    await APP.save("movies", "settings")
+    await APP.save("settings", "movies")  # avval hisoblagich, keyin kino: uzilishda kod takrorlanmaydi
     APP.stats.log_admin(message.from_user.id, "movie_add", f"{m['code']} {m['title']}")
     await state.clear()
-    await message.answer(
-        f"✅ Kino muvaffaqiyatli qo‘shildi!\n\nKino kodi: <code>{m['code']}</code>\nKino nomi: {esc(m['title'])}",
-        reply_markup=ikb([[("➕ Yana kino qo‘shish", "adm:mv_add")], [("⬅️ Kino boshqaruvi", "adm:mv")]]))
+    text, kb = await movie_added_message(bot, m)
+    await message.answer(text, reply_markup=kb)
+
+
+async def movie_added_message(bot: Bot, m: dict) -> tuple[str, InlineKeyboardMarkup]:
+    link = await movie_link(bot, m["code"])
+    text = (
+        "✅ Kino muvaffaqiyatli qo‘shildi!\n\n"
+        f"🎬 Kino: {esc(m['title'])}\n"
+        f"🔢 Kino kodi: <code>{m['code']}</code>\n\n"
+    )
+    rows: list = []
+    if link:
+        text += f"🔗 Kino havolasi:\n<code>{esc(link)}</code>\n\n<i>Havolani bosib nusxalash mumkin.</i>"
+        rows.append([("📋 Havolani nusxalash", "copy", link)])
+    else:
+        text += "⚠️ Bot usernamesi aniqlanmadi, havola yaratib bo‘lmadi. .env ga BOT_USERNAME qo‘shing."
+    rows.append([("➕ Yana kino qo‘shish", "adm:mv_add")])
+    rows.append([("⬅️ Kino boshqaruvi", "adm:mv")])
+    return text, ikb(rows)
 
 
 @admin_r.message(MovieAdd.title)
@@ -1846,7 +2031,7 @@ async def mv_list(cb: CallbackQuery):
 
 
 @admin_r.callback_query(F.data.startswith("adm:mv_i:"))
-async def mv_info(cb: CallbackQuery):
+async def mv_info(cb: CallbackQuery, bot: Bot):
     role = await guard(cb, "movie_menu")
     if not role:
         return
@@ -1863,6 +2048,10 @@ async def mv_info(cb: CallbackQuery):
         f"👁 Ko‘rishlar: <b>{m.get('views_count', 0)}</b>"
     )
     rows = []
+    link = await movie_link(bot, m["code"])
+    if link:
+        text += f"\n🔗 Havola: <code>{esc(link)}</code>"
+        rows.append([("📋 Havolani nusxalash", "copy", link)])
     if can_delete(role, cb.from_user.id, m):
         rows.append([("🗑 O‘chirish", f"adm:mv_x:{m['movie_id']}")])
     rows.append([("⬅️ Orqaga", "adm:mv")])
@@ -2163,11 +2352,15 @@ def ch_menu_text() -> str:
 
 @admin_r.callback_query(F.data == "adm:ch")
 async def ch_menu(cb: CallbackQuery, state: FSMContext):
+    await render_ch_menu(cb, state)
+
+
+async def render_ch_menu(cb: Message | CallbackQuery, state: Optional[FSMContext] = None):
     if not await guard(cb, "channels", state):
         return
     await state.clear()
     await show(cb, ch_menu_text(), ch_menu_kb())
-    await cb.answer()
+    await ack(cb)
 
 
 @admin_r.callback_query(F.data == "adm:ch_tog")
@@ -2451,6 +2644,10 @@ async def ch_link_bad(message: Message):
 # =====================================================================
 @admin_r.callback_query(F.data == "adm:st")
 async def st_menu(cb: CallbackQuery):
+    await render_st_menu(cb)
+
+
+async def render_st_menu(cb: Message | CallbackQuery, state: Optional[FSMContext] = None):
     if not await guard(cb, "stats"):
         return
     kb = ikb([
@@ -2460,7 +2657,7 @@ async def st_menu(cb: CallbackQuery):
         [("⬅️ Orqaga", "adm:home")],
     ])
     await show(cb, "📊 <b>Statistika</b>\n\nBo‘limni tanlang:", kb)
-    await cb.answer()
+    await ack(cb)
 
 
 @admin_r.callback_query(F.data.in_({"adm:st_u", "adm:st_m", "adm:st_a", "adm:st_v", "adm:st_ad"}))
@@ -2516,10 +2713,14 @@ def can_manage(actor_role: str, target_role: str) -> bool:
 
 @admin_r.callback_query(F.data.regexp(r"^adm:ad$|^adm:ad_list:\d+$"))
 async def ad_list(cb: CallbackQuery, state: FSMContext):
+    page = int(cb.data.rsplit(":", 1)[1]) if cb.data.startswith("adm:ad_list:") else 0
+    await render_ad_list(cb, state, page)
+
+
+async def render_ad_list(cb: Message | CallbackQuery, state: Optional[FSMContext] = None, page: int = 0):
     if not await guard(cb, "admins", state):
         return
     await state.clear()
-    page = int(cb.data.rsplit(":", 1)[1]) if cb.data.startswith("adm:ad_list:") else 0
     chunk, page, pages = paginate(APP.admins.listing(), page, 5)
     body = "\n\n".join(admin_detail(a) for a in chunk)
     rows = [[(trunc(f"{a['first_name']} · {ROLE_LABELS[a['role']].split(' (')[0]}", 60), f"adm:ad_i:{a['user_id']}")] for a in chunk]
@@ -2533,7 +2734,7 @@ async def ad_list(cb: CallbackQuery, state: FSMContext):
     rows.append([("➕ Admin qo‘shish", "adm:ad_add")])
     rows.append([("⬅️ Orqaga", "adm:home")])
     await show(cb, trunc(f"👮 <b>Adminlar</b> ({page + 1}/{pages})\n\n{body}", 4000), ikb(rows))
-    await cb.answer()
+    await ack(cb)
 
 
 @admin_r.callback_query(F.data.startswith("adm:ad_i:"))
@@ -2674,6 +2875,10 @@ async def ad_del_do(cb: CallbackQuery, bot: Bot):
 # =====================================================================
 @admin_r.callback_query(F.data == "adm:vip")
 async def vip_menu(cb: CallbackQuery, state: FSMContext):
+    await render_vip_menu(cb, state)
+
+
+async def render_vip_menu(cb: Message | CallbackQuery, state: Optional[FSMContext] = None):
     role = await guard(cb, "vip", state)
     if not role:
         return
@@ -2691,7 +2896,7 @@ async def vip_menu(cb: CallbackQuery, state: FSMContext):
         "aks holda hozirgi vaqtdan (UTC) boshlanadi."
     )
     await show(cb, text, ikb(rows))
-    await cb.answer()
+    await ack(cb)
 
 
 @admin_r.callback_query(F.data.startswith("adm:vip_list:"))
@@ -2807,13 +3012,17 @@ async def vip_pending(cb: CallbackQuery, bot: Bot):
 # =====================================================================
 @admin_r.callback_query(F.data == "adm:bk")
 async def bk_menu(cb: CallbackQuery, state: FSMContext):
+    await render_bk_menu(cb, state)
+
+
+async def render_bk_menu(cb: Message | CallbackQuery, state: Optional[FSMContext] = None):
     if not await guard(cb, "backup", state):
         return
     await state.clear()
     kb = ikb([[("💾 Backup olish", "adm:bk_do")], [("♻️ Backupdan tiklash", "adm:bk_rs")], [("⬅️ Orqaga", "adm:home")]])
     await show(cb, "💾 <b>Backup</b>\n\nBarcha JSON fayllar ZIP arxivga yig‘ilib, faqat sizga yuboriladi.\n"
                    "Tiklashdan oldin joriy holatning backupi avtomatik yuboriladi.", kb)
-    await cb.answer()
+    await ack(cb)
 
 
 async def send_backup(bot: Bot, chat_id: int, caption: str) -> None:
@@ -2924,13 +3133,17 @@ def settings_text() -> str:
 
 @admin_r.callback_query(F.data == "adm:set")
 async def set_menu(cb: CallbackQuery, state: FSMContext):
+    await render_set_menu(cb, state)
+
+
+async def render_set_menu(cb: Message | CallbackQuery, state: Optional[FSMContext] = None):
     if not await guard(cb, "settings", state):
         return
     await state.clear()
     rows = [[(f"✏️ {label}", f"adm:set_e:{k}")] for k, label in SETTING_FIELDS.items()]
     rows.append([("⬅️ Orqaga", "adm:home")])
     await show(cb, settings_text(), ikb(rows))
-    await cb.answer()
+    await ack(cb)
 
 
 @admin_r.callback_query(F.data.startswith("adm:set_e:"))
@@ -3003,6 +3216,10 @@ def progress_text(job: dict) -> str:
 
 @admin_r.callback_query(F.data == "adm:bc")
 async def bc_menu(cb: CallbackQuery, state: FSMContext):
+    await render_bc_menu(cb, state)
+
+
+async def render_bc_menu(cb: Message | CallbackQuery, state: Optional[FSMContext] = None):
     if not await guard(cb, "broadcast", state):
         return
     await state.clear()
@@ -3016,7 +3233,7 @@ async def bc_menu(cb: CallbackQuery, state: FSMContext):
             text += "\n\n<b>Oxirgi broadcast natijasi:</b>\n" + BroadcastManager.report_text(cur)
         rows = [[("✉️ Yangi broadcast", "adm:bc_new")], [("⬅️ Orqaga", "adm:home")]]
     await show(cb, text, ikb(rows))
-    await cb.answer()
+    await ack(cb)
 
 
 @admin_r.callback_query(F.data == "adm:bc_stop")
@@ -3135,11 +3352,417 @@ async def run_broadcast_task(bot: Bot, resumed: bool = False) -> None:
 
 
 # =====================================================================
+# 19b. KANALGA POST JOYLASH (media + matn + pastki inline tugma — bitta post)
+# =====================================================================
+BUTTON_TITLE_MAX = 64
+POST_CAPTION_MAX = 1024
+_HOST_LABEL_RE = re.compile(r"^(?!-)[a-z0-9-]{1,63}(?<!-)$")
+_TLD_RE = re.compile(r"^(?:[a-z]{2,63}|xn--[a-z0-9-]{1,59})$")
+
+
+def validate_button_url(raw: str) -> tuple[Optional[str], Optional[str]]:
+    """Xavfsiz va yaroqli http/https URL. Qaytaradi: (url, xato_xabari)."""
+    url = raw.strip()
+    if not url:
+        return None, "URL bo‘sh."
+    if len(url) > 512:
+        return None, "URL juda uzun (512 belgigacha)."
+    if any(c.isspace() or ord(c) < 32 or ord(c) == 127 or c == "\\" for c in url):
+        return None, "URL ichida bo‘sh joy yoki noto‘g‘ri belgilar bo‘lmasligi kerak."
+    try:
+        parsed = urlparse(url)
+        port = parsed.port
+        host = (parsed.hostname or "").lower()
+    except ValueError:
+        return None, "URL formati noto‘g‘ri."
+    if parsed.scheme.lower() not in ("http", "https"):
+        return None, "Faqat http:// yoki https:// bilan boshlanadigan havola qabul qilinadi."
+    if not host or not parsed.netloc:
+        return None, "URL da domen nomi ko‘rsatilmagan."
+    if parsed.username is not None or parsed.password is not None or "@" in parsed.netloc:
+        return None, "URL ichida login yoki parol bo‘lishi mumkin emas."
+    if port is not None and not 1 <= port <= 65535:
+        return None, "URL dagi port noto‘g‘ri."
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        labels = host.split(".")
+        if len(labels) < 2 or not all(_HOST_LABEL_RE.match(x) for x in labels) or not _TLD_RE.match(labels[-1]):
+            return None, "Domen nomi yaroqsiz (masalan: example.com). Lotin harflaridagi domen kiriting."
+    else:
+        if not ip.is_global:
+            return None, "Ichki yoki maxsus IP manzillar qabul qilinmaydi."
+    return url, None
+
+
+def post_markup(post: dict) -> InlineKeyboardMarkup:
+    b = post["button"]
+    return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=b["title"], url=b["url"])]])
+
+
+async def send_post_to(bot: Bot, chat_id: int, post: dict) -> Message:
+    """Media + caption + inline tugma BITTA xabar sifatida."""
+    kb = post_markup(post)
+    if post["media_type"] == "photo":
+        return await bot.send_photo(chat_id, post["file_id"], caption=post["text_html"], reply_markup=kb)
+    return await bot.send_video(chat_id, post["file_id"], caption=post["text_html"], reply_markup=kb)
+
+
+def explain_post_error(e: Exception) -> str:
+    """Telegram xatosini admin uchun tushunarli o'zbekcha izohga aylantiradi."""
+    raw = str(getattr(e, "message", None) or e)
+    low = raw.lower()
+    if isinstance(e, TelegramForbiddenError) or any(k in low for k in (
+            "not enough rights", "need administrator rights", "chat_write_forbidden", "bot was kicked", "have no rights")):
+        why = "Botda bu kanalga post yuborish huquqi yo‘q yoki bot kanaldan chiqarilgan. Botni administrator qilib, «Xabarlarni joylash» huquqini bering."
+    elif "chat not found" in low:
+        why = "Kanal topilmadi. Chat ID to‘g‘riligini va bot kanalga qo‘shilganini tekshiring."
+    elif "button_url_invalid" in low:
+        why = "Telegram tugma URL manzilini qabul qilmadi. Boshqa URL kiriting."
+    elif "wrong file identifier" in low or "wrong remote file" in low or "failed to get http url content" in low:
+        why = "Media fayl yaroqsiz yoki eskirgan. Postni qaytadan yarating."
+    elif "caption is too long" in low:
+        why = "Post matni juda uzun (1024 belgigacha bo‘lishi kerak)."
+    elif isinstance(e, (TelegramNetworkError, TelegramServerError)):
+        why = "Telegram bilan aloqada xatolik."
+    else:
+        why = "Telegram postni qabul qilmadi."
+    return f"{why}\n\n<i>Telegram javobi: {esc(trunc(raw, 200))}</i>"
+
+
+async def check_can_post(bot: Bot, ref: int | str) -> tuple[Optional[dict], Optional[str]]:
+    """Bot kanalda administrator ekanligini va post yuborish huquqini tekshiradi."""
+    try:
+        chat = await tg_retry(lambda: bot.get_chat(ref))
+    except TelegramAPIError:
+        return None, "Kanal/guruh topilmadi yoki bot unga qo‘shilmagan. Avval botni kanalga administrator qilib qo‘shing."
+    if chat.type == ChatType.PRIVATE:
+        return None, "Bu kanal yoki guruh emas."
+    try:
+        me = await tg_retry(lambda: bot.get_chat_member(chat.id, bot.id))
+    except TelegramAPIError:
+        return None, "Botning kanaldagi huquqlarini aniqlab bo‘lmadi. Botni administrator qiling."
+    if me.status not in (ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.CREATOR):
+        return None, "Bot bu kanalda administrator emas. Botni administrator qilib, «Xabarlarni joylash» huquqini bering."
+    if chat.type == ChatType.CHANNEL and me.status == ChatMemberStatus.ADMINISTRATOR and not getattr(me, "can_post_messages", False):
+        return None, "Botda bu kanalga post yuborish huquqi yo‘q. Administrator huquqlarida «Xabarlarni joylash» (Post messages) ni yoqing."
+    return {"id": chat.id, "title": chat.title or str(chat.id), "username": chat.username, "type": getattr(chat.type, "value", str(chat.type))}, None
+
+
+def post_link(post: dict) -> Optional[str]:
+    mid = post.get("message_id")
+    if not mid:
+        return None
+    if post.get("channel_username"):
+        return f"https://t.me/{post['channel_username']}/{mid}"
+    cid = str(post["channel_id"])
+    return f"https://t.me/c/{cid[4:]}/{mid}" if cid.startswith("-100") else None
+
+
+async def render_post_menu(target: Message | CallbackQuery, state: Optional[FSMContext] = None):
+    """1/4 — kanalni tanlash. Har safar yangi jarayon: eski ma'lumotlar tozalanadi."""
+    if not await guard(target, "channel_post", state):
+        return
+    if state is not None:
+        await state.clear()
+        await state.set_state(PostSt.channel)
+    chans = list(APP.subs.channels.values())[:20]
+    rows = [[(trunc(f"{'🔒' if c['channel_type'] == 'private' else '📢'} {c['title']}", 60), f"adm:pst_ch:{c['channel_id']}")] for c in chans]
+    rows.append(CANCEL_ROW)
+    text = (
+        "📢 <b>Kanalga post joylash</b>\n\n"
+        "1/4 — Post yuboriladigan kanalni tanlang yoki kanal <b>chat ID</b> (yoki @username) ini yuboring.\n\n"
+        "ℹ️ Bot kanalda administrator bo‘lishi va «Xabarlarni joylash» huquqiga ega bo‘lishi kerak."
+    )
+    if not chans:
+        text += "\n\nHozircha botga qo‘shilgan kanallar yo‘q — chat ID yuboring."
+    await show(target, text, ikb(rows))
+    await ack(target)
+
+
+async def _post_select_channel(target: Message | CallbackQuery, state: FSMContext, bot: Bot, ref: int | str) -> None:
+    chat, err = await check_can_post(bot, ref)
+    if err:
+        return await show(target, f"❗ {err}\n\nBoshqa kanalni tanlang yoki chat ID yuboring.", ikb([CANCEL_ROW]))
+    await state.update_data(channel=chat)
+    await state.set_state(PostSt.media)
+    await show(target, f"✅ Kanal: <b>{esc(chat['title'])}</b>\n\n2/4 — Postga <b>rasm</b> yoki <b>video</b> yuboring (faqat bitta).", ikb([CANCEL_ROW]))
+
+
+@admin_r.callback_query(PostSt.channel, F.data.startswith("adm:pst_ch:"))
+async def post_pick_channel(cb: CallbackQuery, state: FSMContext, bot: Bot):
+    if not await guard(cb, "channel_post", state):
+        return
+    c = APP.subs.channels.get(cb.data.rsplit(":", 1)[1])
+    if not c:
+        return await cb.answer("Kanal topilmadi.", show_alert=True)
+    await cb.answer()
+    await _post_select_channel(cb, state, bot, c["channel_id"])
+
+
+@admin_r.message(PostSt.channel, F.text)
+async def post_channel_ref(message: Message, state: FSMContext, bot: Bot):
+    if not await guard(message, "channel_post", state):
+        return
+    ref = parse_chat_ref(message.text)
+    if ref is None:
+        return await message.answer("❗ Format noto‘g‘ri. Chat ID (masalan -1001234567890) yoki @username yuboring.", reply_markup=ikb([CANCEL_ROW]))
+    await _post_select_channel(message, state, bot, ref)
+
+
+@admin_r.message(PostSt.media, F.photo | F.video)
+async def post_media(message: Message, state: FSMContext):
+    if not await guard(message, "channel_post", state):
+        return
+    gid = message.media_group_id
+    if gid:  # albom: bitta media qabul qilinadi, albom emas
+        if (await state.get_data()).get("album_gid") != gid:
+            await state.update_data(album_gid=gid)
+            await message.answer("❗ Faqat <b>bitta</b> rasm yoki video yuboring (albom qabul qilinmaydi).", reply_markup=ikb([CANCEL_ROW]))
+        return
+    if message.photo:
+        mtype, fid = "photo", message.photo[-1].file_id
+    else:
+        mtype, fid = "video", message.video.file_id
+    await state.update_data(media_type=mtype, file_id=fid)
+    await state.set_state(PostSt.text)
+    await message.answer(
+        f"✅ {'Rasm' if mtype == 'photo' else 'Video'} qabul qilindi.\n\n3/4 — Post matnini yuboring "
+        f"(rasm/video ostida chiqadi, {POST_CAPTION_MAX} belgigacha).", reply_markup=ikb([CANCEL_ROW]))
+
+
+@admin_r.message(PostSt.media)
+async def post_media_bad(message: Message):
+    await message.answer("❗ Faqat <b>bitta rasm</b> yoki <b>video</b> yuboring. Matn, stiker, fayl va boshqa formatlar qabul qilinmaydi.", reply_markup=ikb([CANCEL_ROW]))
+
+
+def post_kind_kb() -> InlineKeyboardMarkup:
+    return ikb([[("🔗 Oddiy URL tugmasi", "adm:pst_k:url")], [("🎬 Kino havolasi (kino kodi)", "adm:pst_k:movie")], CANCEL_ROW])
+
+
+@admin_r.message(PostSt.text, F.text)
+async def post_text(message: Message, state: FSMContext):
+    if not await guard(message, "channel_post", state):
+        return
+    plain = message.text.strip()
+    if not plain:
+        return await message.answer("❗ Matn bo‘sh bo‘lmasligi kerak.", reply_markup=ikb([CANCEL_ROW]))
+    if len(plain) > POST_CAPTION_MAX:
+        return await message.answer(f"❗ Matn juda uzun ({len(plain)} belgi). Rasm/video ostidagi matn {POST_CAPTION_MAX} belgidan oshmasligi kerak.", reply_markup=ikb([CANCEL_ROW]))
+    await state.update_data(text_html=message.html_text)
+    await state.set_state(PostSt.btn_kind)
+    await message.answer("✅ Matn saqlandi.\n\n4/4 — Postning pastki tugmasi uchun qanday havola kerak?", reply_markup=post_kind_kb())
+
+
+@admin_r.callback_query(PostSt.btn_kind, F.data.in_({"adm:pst_k:url", "adm:pst_k:movie"}))
+async def post_pick_kind(cb: CallbackQuery, state: FSMContext):
+    if not await guard(cb, "channel_post", state):
+        return
+    if cb.data.endswith(":url"):
+        await state.set_state(PostSt.url_title)
+        await show(cb, "🔗 <b>Oddiy URL tugmasi</b>\n\nTugma nomini (title) yuboring.\nMasalan: <code>Batafsil ko‘rish</code>", ikb([CANCEL_ROW]))
+    else:
+        await state.set_state(PostSt.movie_code)
+        await show(cb, "🎬 <b>Kino havolasi</b>\n\nTugma ochadigan kinoning <b>kodini</b> yuboring.\nMasalan: <code>11</code>", ikb([CANCEL_ROW]))
+    await cb.answer()
+
+
+def _clean_button_title(text: str) -> Optional[str]:
+    t = " ".join(text.split())
+    return t if 1 <= len(t) <= BUTTON_TITLE_MAX else None
+
+
+@admin_r.message(PostSt.url_title, F.text)
+async def post_url_title(message: Message, state: FSMContext):
+    if not await guard(message, "channel_post", state):
+        return
+    title = _clean_button_title(message.text)
+    if not title:
+        return await message.answer(f"❗ Tugma nomi 1–{BUTTON_TITLE_MAX} belgidan iborat bo‘lishi kerak.", reply_markup=ikb([CANCEL_ROW]))
+    await state.update_data(button={"kind": "url", "title": title})
+    await state.set_state(PostSt.url_value)
+    await message.answer("✅ Tugma nomi saqlandi.\n\nEndi tugma URL manzilini yuboring.\nMasalan: <code>https://example.com</code>", reply_markup=ikb([CANCEL_ROW]))
+
+
+@admin_r.message(PostSt.url_value, F.text)
+async def post_url_value(message: Message, state: FSMContext, bot: Bot):
+    if not await guard(message, "channel_post", state):
+        return
+    url, err = validate_button_url(message.text)
+    if err:
+        return await message.answer(f"❗ {err}\n\nURL ni qaytadan yuboring.", reply_markup=ikb([CANCEL_ROW]))
+    data = await state.get_data()
+    await state.update_data(button={**data["button"], "url": url})
+    await post_make_preview(message, state, bot)
+
+
+@admin_r.message(PostSt.movie_code, F.text)
+async def post_movie_code(message: Message, state: FSMContext):
+    if not await guard(message, "channel_post", state):
+        return
+    movie = APP.movies.by_code(message.text.strip())
+    if not movie:
+        return await message.answer("❌ Bunday kodli kino topilmadi. Kino kodini to‘g‘ri kiriting va qaytadan yuboring.", reply_markup=ikb([CANCEL_ROW]))
+    await state.update_data(button={"kind": "movie", "code": movie["code"]})
+    await state.set_state(PostSt.movie_title)
+    await message.answer(
+        f"✅ Kino topildi: <b>{esc(movie['title'])}</b>\n\nEndi tugma nomini yuboring.\nMasalan: <code>🎬 Kinoni ko‘rish</code>",
+        reply_markup=ikb([CANCEL_ROW]))
+
+
+@admin_r.message(PostSt.movie_title, F.text)
+async def post_movie_title(message: Message, state: FSMContext, bot: Bot):
+    if not await guard(message, "channel_post", state):
+        return
+    title = _clean_button_title(message.text)
+    if not title:
+        return await message.answer(f"❗ Tugma nomi 1–{BUTTON_TITLE_MAX} belgidan iborat bo‘lishi kerak.", reply_markup=ikb([CANCEL_ROW]))
+    data = await state.get_data()
+    movie = APP.movies.by_code(data["button"]["code"])
+    if not movie:  # kod kiritilgandan keyin kino o'chirilgan bo'lishi mumkin
+        await state.set_state(PostSt.movie_code)
+        return await message.answer("❌ Bu kino o‘chirilgan. Boshqa kino kodini yuboring.", reply_markup=ikb([CANCEL_ROW]))
+    url = await movie_link(bot, movie["code"])
+    if not url:
+        return await message.answer("⚠️ Bot usernamesi aniqlanmadi, kino havolasini yaratib bo‘lmadi. .env ga BOT_USERNAME qo‘shing.", reply_markup=ikb([CANCEL_ROW]))
+    await state.update_data(button={**data["button"], "title": title, "url": url})
+    await post_make_preview(message, state, bot)
+
+
+@admin_r.message(StateFilter(PostSt.channel, PostSt.text, PostSt.url_title, PostSt.url_value, PostSt.movie_code, PostSt.movie_title))
+async def post_text_expected(message: Message):
+    await message.answer("❗ Iltimos, <b>matn</b> ko‘rinishida yuboring.", reply_markup=ikb([CANCEL_ROW]))
+
+
+@admin_r.message(StateFilter(PostSt.btn_kind, PostSt.confirm))
+async def post_buttons_expected(message: Message):
+    await message.answer("👆 Iltimos, yuqoridagi tugmalardan birini tanlang.")
+
+
+async def post_make_preview(message: Message, state: FSMContext, bot: Bot) -> None:
+    """Preview: post aynan kanalga ketadigan ko'rinishda (media + matn + tugma) adminga yuboriladi."""
+    d = await state.get_data()
+    draft = {"media_type": d["media_type"], "file_id": d["file_id"], "text_html": d["text_html"], "button": d["button"]}
+    try:
+        pm = await send_post_to(bot, message.chat.id, draft)
+    except TelegramAPIError as e:
+        await state.set_state(PostSt.btn_kind)
+        return await message.answer(f"❗ Postni ko‘rsatib bo‘lmadi.\n\n{explain_post_error(e)}\n\nTugmani qaytadan tanlang.", reply_markup=post_kind_kb())
+    p = APP.posts.create(message.from_user.id, d["channel"], d["media_type"], d["file_id"], d["text_html"], d["button"], pm.message_id)
+    await APP.save("channel_posts", "settings")
+    await state.set_state(PostSt.confirm)
+    await state.set_data({"pid": p["post_id"]})
+    await message.answer(
+        f"👆 Yuqorida post ko‘rinishi (preview).\n\n📢 Kanal: <b>{esc(p['channel_title'])}</b>\n\nKanalga yuborishni tasdiqlaysizmi?",
+        reply_markup=ikb([[("✅ Kanalga yuborish", f"adm:pst_ok:{p['post_id']}"), ("❌ Bekor qilish", f"adm:pst_no:{p['post_id']}")]]))
+
+
+def _own_post(cb: CallbackQuery) -> Optional[dict]:
+    p = APP.posts.get(cb.data.rsplit(":", 1)[1])
+    return p if p and p["admin_id"] == cb.from_user.id else None
+
+
+@admin_r.callback_query(F.data.startswith("adm:pst_ok:"))
+async def post_confirm(cb: CallbackQuery, state: FSMContext, bot: Bot):
+    if not await guard(cb, "channel_post", state):
+        return
+    p = _own_post(cb)
+    if not p:
+        return await cb.answer("Post topilmadi (eskirgan bo‘lishi mumkin).", show_alert=True)
+    # ---- takroriy yuborishdan himoya: holat tekshiruvi va 'sending' belgisi orasida await yo'q
+    if p["status"] == "sending":
+        return await cb.answer("⏳ Post hozir yuborilmoqda.", show_alert=True)
+    if p["status"] == "sent":
+        return await cb.answer("✅ Bu post allaqachon kanalga yuborilgan.", show_alert=True)
+    if p["status"] == "uncertain":
+        return await cb.answer("⚠️ Post holati noma'lum. Dublikat bo‘lmasligi uchun avval kanalni tekshiring, kerak bo‘lsa yangi post yarating.", show_alert=True)
+    if p["status"] == "cancelled":
+        return await cb.answer("Bu post bekor qilingan.", show_alert=True)
+    if APP.posts.is_expired_draft(p):
+        return await cb.answer("⌛ Preview eskirgan. Postni qaytadan yarating.", show_alert=True)
+    p["status"] = "sending"
+    p["attempts"] += 1
+    p["error"] = None
+    APP.db.touch("channel_posts")
+    await cb.answer("Yuborilmoqda…")
+    await APP.save("channel_posts")  # 'sending' diskka yoziladi: restart bo'lsa takroriy yuborilmaydi
+    try:
+        chat, err = await check_can_post(bot, p["channel_id"])
+        if err:
+            return await _post_failed(cb, p, f"❗ {err}")
+        for _ in range(3):
+            try:
+                sent = await send_post_to(bot, p["channel_id"], p)
+                break
+            except TelegramRetryAfter as e:  # Telegram rad etgan: xavfsiz qayta urinish
+                await asyncio.sleep(e.retry_after + 0.5)
+        else:
+            return await _post_failed(cb, p, "❗ Telegram so‘rovlarni vaqtincha cheklagan (FloodWait). Birozdan so‘ng qayta urinib ko‘ring.")
+    except (TelegramNetworkError, TelegramServerError) as e:
+        # So'rov yetib borgan-bormaganligi noma'lum: avtomatik qayta yuborilmaydi (dublikat xavfi)
+        p["status"] = "uncertain"
+        p["error"] = str(e)[:200]
+        await APP.save("channel_posts")
+        return await show(cb, "⚠️ Telegram bilan aloqa uzildi — post kanalga yetib borgan-bormaganligi noma'lum.\n\n"
+                              "Dublikat bo‘lmasligi uchun <b>kanalni tekshiring</b>. Post yo‘q bo‘lsa, yangi post yarating.",
+                          ikb([[("⬅️ Orqaga", "adm:home")]]))
+    except TelegramAPIError as e:
+        logger.warning("Kanalga post yuborilmadi (%s): %s", p["post_id"], e)
+        return await _post_failed(cb, p, f"❗ Post yuborilmadi.\n\n{explain_post_error(e)}")
+    p.update(status="sent", message_id=sent.message_id, sent_at=iso(utcnow()), error=None)
+    await APP.save("channel_posts")
+    APP.stats.log_admin(cb.from_user.id, "channel_post", f"{p['post_id']} -> {p['channel_id']}")
+    await state.clear()
+    link = post_link(p)
+    rows = [[("🔗 Postni ochish", "url", link)]] if link else []
+    await show(cb, f"✅ Post kanalga yuborildi!\n\n📢 Kanal: <b>{esc(p['channel_title'])}</b>", ikb(rows) if rows else None)
+
+
+async def _post_failed(cb: CallbackQuery, p: dict, text: str) -> None:
+    p["status"] = "failed"
+    p["error"] = re.sub(r"<[^>]+>", "", text)[:300]
+    await APP.save("channel_posts")
+    await show(cb, text, ikb([[("🔁 Qayta urinish", f"adm:pst_ok:{p['post_id']}"), ("❌ Bekor qilish", f"adm:pst_no:{p['post_id']}")]]))
+
+
+@admin_r.callback_query(F.data.startswith("adm:pst_no:"))
+async def post_cancel(cb: CallbackQuery, state: FSMContext, bot: Bot):
+    if not await guard(cb, "channel_post", state):
+        return
+    await state.clear()  # eski media/matn/tugma keyingi postga aralashmaydi
+    p = _own_post(cb)
+    if p and p["status"] == "sending":
+        return await cb.answer("⏳ Post hozir yuborilmoqda — bekor qilib bo‘lmaydi.", show_alert=True)
+    if p and p["status"] == "sent":
+        return await cb.answer("Post allaqachon yuborilgan — bekor qilib bo‘lmaydi.", show_alert=True)
+    if p and p["status"] in ("draft", "failed"):
+        p["status"] = "cancelled"
+        await APP.save("channel_posts")
+        if p.get("preview_message_id"):
+            with contextlib.suppress(TelegramAPIError):
+                await bot.delete_message(cb.from_user.id, p["preview_message_id"])
+    await show(cb, "❌ Post yaratish bekor qilindi.")
+    await cb.answer()
+
+
+# =====================================================================
 # 20. ESKIRGAN / RUXSATSIZ ADMIN CALLBACKLARI (admin_r dagi oxirgi handler)
 # =====================================================================
+ADMIN_SECTIONS: dict[str, tuple[str, Callable[..., Awaitable[Any]]]] = {
+    ADM_BTN_MOVIES: ("movie_menu", render_mv_menu),
+    ADM_BTN_CHANNELS: ("channels", render_ch_menu),
+    ADM_BTN_STATS: ("stats", render_st_menu),
+    ADM_BTN_ADMINS: ("admins", render_ad_list),
+    ADM_BTN_VIP: ("vip", render_vip_menu),
+    ADM_BTN_POST: ("channel_post", render_post_menu),
+    ADM_BTN_BACKUP: ("backup", render_bk_menu),
+    ADM_BTN_SETTINGS: ("settings", render_set_menu),
+    ADM_BTN_BROADCAST: ("broadcast", render_bc_menu),
+}
+
 _CB_PERM_PREFIX = (
     ("adm:bc", "broadcast"), ("adm:bk", "backup"), ("adm:rs", "restore"), ("adm:set", "settings"),
-    ("adm:st", "stats"), ("adm:ch", "channels"), ("adm:ad", "admins"), ("adm:vip", "vip"), ("adm:mv", "movie_menu"),
+    ("adm:pst", "channel_post"), ("adm:st", "stats"), ("adm:ch", "channels"), ("adm:ad", "admins"), ("adm:vip", "vip"), ("adm:mv", "movie_menu"),
 )
 
 
